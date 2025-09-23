@@ -1,0 +1,68 @@
+name: Manual APK Build
+
+on:
+  workflow_dispatch:  # 手动触发
+    inputs:
+      build_type:
+        description: '构建类型'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+        - debug
+        - release
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Install npm dependencies
+      run: npm ci
+    
+    - name: Create gradle wrapper
+      run: |
+        cd android
+        gradle wrapper --gradle-version 8.0.1
+    
+    - name: Make gradlew executable
+      run: chmod +x android/gradlew
+    
+    - name: Build APK
+      run: |
+        cd android
+        if [ "${{ github.event.inputs.build_type }}" == "release" ]; then
+          ./gradlew assembleRelease
+        else
+          ./gradlew assembleDebug
+        fi
+        
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: android-${{ github.event.inputs.build_type }}-apk
+        path: android/app/build/outputs/apk/${{ github.event.inputs.build_type }}/*.apk
+        if-no-files-found: warn
+        
+    - name: Notify completion
+      run: |
+        echo "✅ APK构建完成！"
+        echo "📥 请在Artifacts中下载APK文件"
