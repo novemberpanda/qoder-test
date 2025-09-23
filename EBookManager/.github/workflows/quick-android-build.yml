@@ -1,0 +1,76 @@
+name: Quick Android Build
+
+on:
+  workflow_dispatch:  # 手动触发
+    inputs:
+      build_type:
+        description: '构建类型'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+        - debug
+        - release
+
+jobs:
+  quick-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Install dependencies
+      run: |
+        npm ci
+        
+    - name: Download Gradle Wrapper
+      run: |
+        cd android
+        curl -L https://services.gradle.org/distributions/gradle-8.0.1-bin.zip -o gradle.zip
+        unzip gradle.zip
+        chmod +x gradle-8.0.1/bin/gradle
+        gradle-8.0.1/bin/gradle wrapper
+        chmod +x gradlew
+        
+    - name: Build APK
+      run: |
+        cd android
+        if [ "${{ github.event.inputs.build_type }}" == "release" ]; then
+          ./gradlew assembleRelease
+        else
+          ./gradlew assembleDebug
+        fi
+        
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: android-${{ github.event.inputs.build_type }}-apk
+        path: android/app/build/outputs/apk/${{ github.event.inputs.build_type }}/*.apk
+        
+    - name: Comment PR with download link
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '📱 Android APK已构建完成！\n\n🔗 [下载APK](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
+          })

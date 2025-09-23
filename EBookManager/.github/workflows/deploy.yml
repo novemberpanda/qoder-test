@@ -1,0 +1,124 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # 代码质量检查
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run lint
+      run: npm run lint
+    
+    - name: Run tests
+      run: npm test
+    
+    - name: Type check
+      run: npm run typecheck
+
+  # Android构建
+  build-android:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Setup Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '11'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v2
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build Android APK
+      run: |
+        cd android
+        ./gradlew assembleRelease
+    
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: android-apk
+        path: android/app/build/outputs/apk/release/
+
+  # iOS构建
+  build-ios:
+    needs: lint-and-test
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Install CocoaPods
+      run: |
+        cd ios
+        pod install
+    
+    - name: Build iOS
+      run: |
+        xcodebuild -workspace ios/EBookManager.xcworkspace \
+                   -scheme EBookManager \
+                   -configuration Release \
+                   -destination 'generic/platform=iOS' \
+                   -archivePath ios/build/EBookManager.xcarchive \
+                   archive
+
+  # 部署到TestFlight和Google Play Beta
+  deploy-beta:
+    if: github.ref == 'refs/heads/develop'
+    needs: [build-android, build-ios]
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Fastlane
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.0'
+        bundler-cache: true
+    
+    - name: Deploy to TestFlight
+      env:
+        FASTLANE_USER: ${{ secrets.FASTLANE_USER }}
+        FASTLANE_PASSWORD: ${{ secrets.FASTLANE_PASSWORD }}
+      run: fastlane ios beta
+    
+    - name: Deploy to Google Play Beta
+      env:
+        ANDROID_KEYSTORE_FILE: ${{ secrets.ANDROID_KEYSTORE_FILE }}
+        ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      run: fastlane android beta

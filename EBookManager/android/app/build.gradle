@@ -1,0 +1,58 @@
+apply plugin: "com.android.application"
+apply plugin: "com.facebook.react"
+
+/**
+ * 应用级别的build.gradle配置
+ */
+
+android {
+    compileSdkVersion 33
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    defaultConfig {
+        applicationId "com.ebookmanager"
+        minSdkVersion 21
+        targetSdkVersion 33
+        versionCode 1
+        versionName "1.0.0"
+        
+        // 启用多dex支持
+        multiDexEnabled true
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            // 生产版本配置
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.facebook.react:react-android'
+    implementation 'androidx.multidex:multidex:2.0.1'
+    
+    if (hermesEnabled.toBoolean()) {
+        implementation('com.facebook.react:hermes-android')
+    } else {
+        implementation 'org.webkit:android-jsc:+'
+    }
+}
